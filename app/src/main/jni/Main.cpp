@@ -37,7 +37,7 @@
 #include "Global.h"
 #include "MenuUi.h"
 
-#include "Esp/include.h"
+#include "Esp/inc.h"
 
 #define targetLibName OBFUSCATE("libil2cpp.so")
 
