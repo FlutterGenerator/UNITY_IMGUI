@@ -48,5 +48,6 @@ LOCAL_SRC_FILES := Main.cpp \
     ImGui/imgui_tables.cpp \
     ImGui/backends/imgui_impl_opengl3.cpp \
     ImGui/backends/imgui_impl_android.cpp \
-    
+
+LOCAL_CPPFLAGS += -frtti
 include $(BUILD_SHARED_LIBRARY)
