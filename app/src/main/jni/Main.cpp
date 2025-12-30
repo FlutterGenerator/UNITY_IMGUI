@@ -24,6 +24,7 @@
 #include "Includes/obfuscate.h"
 #include "Includes/Utils.h"
 #include "KittyMemory/MemoryPatch.h"
+#include "And64InlineHook/And64InlineHook.hpp"
 #include "StarDust/Dobby/dobby.h"
 #include "StarDust/Fonts/GoogleSans.h"
 
@@ -36,10 +37,6 @@
 
 #include "Global.h"
 #include "MenuUi.h"
-
-//#include "Esp/Draww.h"
-//#include "Esp/Struc.h"
-//#include "Esp/Vector3.h"
 
 #include "Esp/Inc.h"
 
