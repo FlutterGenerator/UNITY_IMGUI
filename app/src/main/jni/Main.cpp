@@ -41,7 +41,7 @@
 //#include "Esp/Struc.h"
 //#include "Esp/Vector3.h"
 
-#include "Esp/inc.h"
+#include "Esp/Inc.h"
 
 #define targetLibName OBFUSCATE("libil2cpp.so")
 
