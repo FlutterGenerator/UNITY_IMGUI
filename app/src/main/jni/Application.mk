@@ -6,6 +6,7 @@ APP_OPTIMA := release
 APP_THIN_ARCHIVE := true
 APP_PIE := true
 APP_CPPFLAGS += -frtti
+APP_SUPPORT_FLEXIBLE_PAGE_SIZES := true
 
 ifneq ($(APP_OPTIM), debug)
   $(info APP_OPTIM is $(APP_OPTIM) ...)
