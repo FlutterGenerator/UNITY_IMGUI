@@ -3,12 +3,12 @@ plugins {
 }
 
 android {
-    compileSdk 31
-    namespace "com.stardust.xdd"
+    compileSdkVersion 29
+    //namespace "com.stardust.xdd"
     defaultConfig {
         applicationId "com.stardust.xdd"
         minSdkVersion 23
-        targetSdkVersion 31
+        targetSdkVersion 29
         versionCode 250
         versionName "2.5"
         ndk {
