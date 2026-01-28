@@ -7,7 +7,7 @@ android {
     namespace "com.stardust.xdd"
     defaultConfig {
         applicationId "com.stardust.xdd"
-        minSdkVersion 21
+        minSdkVersion 23
         targetSdkVersion 30
         versionCode 250
         versionName "2.5"
