@@ -7,7 +7,6 @@ ImFont* titleFont;
 ImFont* tabFont;
 ImFont* uiFont;
 
-
 static float menuTransparency = 0.95f;  
 static ImVec4 backgroundColor = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);  
 static float rounding = 5.0f; 
@@ -117,7 +116,6 @@ bool IsFloatExample2 = false;
 bool IsDoubleExample2 = false;
 
 
-
 // Bool Method Offset Hooking Example:
 bool (*old_BoolExample2)(void *instance);
 bool BoolExample2(void *instance) {
@@ -186,14 +184,12 @@ bool Free_Shop = false;  // Free_Shop
 bool (*old_Free_Shop)(void *instance);
 bool Hook_Free_Shop(void *instance) {
     if (instance != NULL && Free_Shop) {
-          return false; // Or you can put return true;.
-		}
+          return false; // Or you can put return true;
 	}
 	return old_Free_Shop(instance);
 }
 
 // =============[🔴🔴🔴🔴🔴🔴]================
-
 
 void DrawMenu() {
     // For Portrait Mode Game
@@ -207,7 +203,6 @@ void DrawMenu() {
 	*/
 
     ImGuiIO& io = ImGui::GetIO();
-     
 	
     // Set style for both window and element rounding using one rounding value
     ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(backgroundColor.x, backgroundColor.y, backgroundColor.z, backgroundColor.w * menuTransparency));
@@ -224,7 +219,6 @@ void DrawMenu() {
     ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarRounding, rounding); // Scrollbar corner rounding
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, borderSize);  // Window border size
 
-	
     ImGui::SetNextWindowPos(window_pos, ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(window_size, ImGuiCond_FirstUseEver);
 	
@@ -233,12 +227,10 @@ void DrawMenu() {
 
     if (ImGui::BeginTabItem("Player Hacks")) {
 		
-		
        ImGui::Checkbox("Unlimited Jump", &Unlimited_jump);
        ImGui::Checkbox("Free Shop", &Free_Shop);
-       
-       
-        ImGui::EndTabItem();
+		
+		ImGui::EndTabItem();
     }
 
     if (ImGui::BeginTabItem("THEME")) {
@@ -252,14 +244,13 @@ void DrawMenu() {
         ImGui::PopFont();
         ImGui::EndTabItem();
     }
-
-    
+			
     ImGui::EndTabBar();
 }
-	
+		
 	hexpatcher();
     ImGui::End();
-	
+		
 	}
 }
 
