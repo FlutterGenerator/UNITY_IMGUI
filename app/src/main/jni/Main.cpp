@@ -83,18 +83,18 @@ if (!isLoaderDone) {
         
         // unlimited Currency
         auto PlayerUnlimited_Currency = new LoadClass("SYBO.Subway.Core.ProfileData", OBFUSCATE("WalletModel"));
-DWORD GetUnlimited_Currency = PlayerUnlimited_Currency->GetMethodOffsetByName(OBFUSCATE("GetCurrency"), 0);
-MSHookFunction((void *)GetUnlimited_Currency, (void *)Unlimited_Currency, (void **) &old_Unlimited_Currency);
+                DWORD GetUnlimited_Currency = PlayerUnlimited_Currency->GetMethodOffsetByName(OBFUSCATE("GetCurrency"), 0);
+        DobbyHook((void *)GetUnlimited_Currency, (void *)Unlimited_Currency, (void **) &old_Unlimited_Currency);
 
-// unlimited MaxPowerUp
-auto PlayerMaxPowerUp = new LoadClass("SYBO.Subway.Core.ProfileData", OBFUSCATE("UpgradesModel"));
-DWORD GetMaxPowerUp = PlayerMaxPowerUp->GetMethodOffsetByName(OBFUSCATE("GetPowerupLevel"), 0);
-MSHookFunction((void *)GetMaxPowerUp, (void *)MaxPowerUp, (void **) &old_MaxPowerUp);
+        // unlimited MaxPowerUp
+        auto PlayerMaxPowerUp = new LoadClass("SYBO.Subway.Core.ProfileData", OBFUSCATE("UpgradesModel"));
+                DWORD GetMaxPowerUp = PlayerMaxPowerUp->GetMethodOffsetByName(OBFUSCATE("GetPowerupLevel"), 0);
+        DobbyHook((void *)GetMaxPowerUp, (void *)MaxPowerUp, (void **) &old_MaxPowerUp);
 
-// NoCrash
-auto PlayerNoCrash = new LoadClass("SYBO.Subway", OBFUSCATE("StumbleBehaviour"));
-DWORD GetNoCrash = PlayerNoCrash->GetMethodOffsetByName(OBFUSCATE("IsAutoReviveEnabled"), 0);
-MSHookFunction((void *)GetNoCrash, (void *)NoCrash, (void **) &old_NoCrash);
+        // NoCrash
+        auto PlayerNoCrash = new LoadClass("SYBO.Subway", OBFUSCATE("StumbleBehaviour"));
+                DWORD GetNoCrash = PlayerNoCrash->GetMethodOffsetByName(OBFUSCATE("IsAutoReviveEnabled"), 0);
+        DobbyHook((void *)GetNoCrash, (void *)NoCrash, (void **) &old_NoCrash);
 
         //===============🟢🟢🟢🟢🟢🟢🟢=============
         isLoaderDone = true;
