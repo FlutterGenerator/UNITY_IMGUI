@@ -60,55 +60,55 @@ uintptr_t P_shop; // Free shop offset stored here
 
 
 void *hack_thread(void *) {
-    
+
     do {
         sleep(5);
     } while (!isLibraryLoaded(targetLibName));
-	
-	// Anti-Lib Rename !
-	do {
+
+        // Anti-Lib Rename !
+        do {
         sleep(2);
     } while (!isLibraryLoaded("libstardust.so"));
- 
+
 if (!isLoaderDone) {
-	
-	//===============🟢🟢🟢🟢🟢🟢🟢=============
-	
-	// Auto update offset - Namespace > class > method
-	
-	
-	// Free shop hack
-	auto JUMP = new LoadClass("SYBO.RunnerCore.Character", OBFUSCATE("CharacterMotorAbilities"));
+
+        //===============🟢🟢🟢🟢🟢🟢🟢=============
+
+        // Auto update offset - Namespace > class > method
+
+
+        // unlimited jump hack
+        auto JUMP = new LoadClass("SYBO.RunnerCore.Character", OBFUSCATE("CharacterMotorAbilities"));
     P_jump = JUMP->GetMethodOffsetByName(OBFUSCATE("get_JumpLimit"), 0);
-	DobbyHook((void *) P_jump, (void *) jump, (void **) &old_jump);
-	
-	
-	// unlimited jump hack
-	auto SHOP = new LoadClass("SYBO.Subway.Meta", OBFUSCATE("Currency"));
+        DobbyHook((void *) P_jump, (void *) jump, (void **) &old_jump);
+
+
+        // Free shop hack
+        auto SHOP = new LoadClass("SYBO.Subway.Core.GameData", OBFUSCATE("Currency"));
     P_shop = SHOP->GetMethodOffsetByName(OBFUSCATE("get_IsIAP"), 0);
-	DobbyHook((void *) P_shop, (void *) Freeshop, (void **) &old_Freeshop);
-	
-	
-	
-	//===============🟢🟢🟢🟢🟢🟢🟢=============
-	isLoaderDone = true;
+        DobbyHook((void *) P_shop, (void *) Freeshop, (void **) &old_Freeshop);
+
+
+
+        //===============🟢🟢🟢🟢🟢🟢🟢=============
+        isLoaderDone = true;
  }
- 
+
     LOGI(OBFUSCATE("%s has been loaded"), (const char *) targetLibName);
-	
-	// WE SUPPORT ALL TYPE HOOKING TAKEN FROM LGL 3.2
-		
-	
-	
-	
-	
+
+        // WE SUPPORT ALL TYPE HOOKING TAKEN FROM LGL 3.2
+
+
+
+
+
 #if defined(__aarch64__) 
- 
+
     // Patching offsets directly. Strings are automatically obfuscated too!
    // PATCH("0x20D3A8", "00 00 A0 E3 1E FF 2F E1");
     // PATCH_LIB("libFileB.so", "0x20D3A8", "00 00 A0 E3 1E FF 2F E1");
 
-    
+
 #else //To compile this code for armv7 lib only.
 
   //  PATCH("0x20D3A8", "00 00 A0 E3 1E FF 2F E1");
@@ -117,28 +117,28 @@ if (!isLoaderDone) {
     //Restore changes to original
    // RESTORE("0x20D3A8");
    // RESTORE_LIB("libFileB.so", "0x20D3A8");
-	
+
     LOGI(OBFUSCATE("Done"));
 #endif
 
 
-	pthread_exit(nullptr);
+        pthread_exit(nullptr);
     return nullptr;
-	
+
 }
 
 
 void hexpatcher() {
-	    // PATCH_SWITCH_EXT
+            // PATCH_SWITCH_EXT
         // Additional macro to apply hex patches from an external const char* source.
         // All external hex patches are added in global.h; you can add more there if desired.
-		// PATCH_SWITCH_EXT Additionl macro to use hex patches from external const char*
-		
-	    
-		//More Switches
-		//PATCH_SWITCH_AU(OFFSET.GetMaxRank, "0A 00 A0 E3 1E FF 2F E1", isMaxLevel);
-	    //PATCH_SWITCH("0x1234",  "0A 00 A0 E3 1E FF 2F E1", isMaxLevel)
-		//PATCH_LIB_SWITCH("libil2cpp.so", "0x1234", "0A 00 A0 E3 1E FF 2F E1", isMaxLevel)
+                // PATCH_SWITCH_EXT Additionl macro to use hex patches from external const char*
+
+
+                //More Switches
+                //PATCH_SWITCH_AU(OFFSET.GetMaxRank, "0A 00 A0 E3 1E FF 2F E1", isMaxLevel);
+            //PATCH_SWITCH("0x1234",  "0A 00 A0 E3 1E FF 2F E1", isMaxLevel)
+                //PATCH_LIB_SWITCH("libil2cpp.so", "0x1234", "0A 00 A0 E3 1E FF 2F E1", isMaxLevel)
 }
 
 
@@ -148,7 +148,7 @@ void *imgui_go(void *) {
     if (addr) {
         DobbyHook(addr, (void *)hook_eglSwapBuffers, (void **)&old_eglSwapBuffers);
     } else {
-		LOGI(OBFUSCATE("eglSwapBuffers is not found"));
+                LOGI(OBFUSCATE("eglSwapBuffers is not found"));
     }
 
     pthread_exit(nullptr);
@@ -172,7 +172,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
     }
 
     void *sym_input = DobbySymbolResolver(LIB_INPUT_PATH, "_ZN7android13InputConsumer21initializeMotionEventEPNS_11MotionEventEPKNS_12InputMessageE");
-    
+
     if (sym_input != NULL) {
         DobbyHook(sym_input, (void *)myInput, (void **)&origInput);
     }
