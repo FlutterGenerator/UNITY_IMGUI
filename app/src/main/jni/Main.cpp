@@ -86,7 +86,7 @@ if (!isLoaderDone) {
         // Free shop hack
         auto SHOP = new LoadClass("SYBO.Subway.Core.GameData", OBFUSCATE("Currency"));
     P_shop = SHOP->GetMethodOffsetByName(OBFUSCATE("get_IsIAP"), 0);
-        DobbyHook((void *) P_shop, (void *) shop, (void **) &old_shop);
+        DobbyHook((void *) P_shop, (void *) Freeshop, (void **) &old_shop);
 
 
 
