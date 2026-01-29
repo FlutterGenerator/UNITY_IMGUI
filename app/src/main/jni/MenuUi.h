@@ -165,28 +165,26 @@ double DoubleExample2(void *instance) {
 
 // Hooks sane as lgl 3.2
 
-bool Unlimited_jump = false;  // unlimited Jump Hack
+bool IsUnlimited_jump = false;  // unlimited Jump Hack
 
 // Int Method Offset Hooking Example:
-int (*old_jump)(void *instance);
-int jump(void *instance) {
-	if (instance != NULL) {
-		if (Unlimited_jump) {
+int (*old_Unlimited_jump)(void *instance);
+int Unlimited_jump(void *instance) {
+    if (instance != NULL && IsUnlimited_jump) {
 			return 999999999; // Int Hook Value = 999,999,999
 		}
-	}
-	return old_jump(instance);
+	return old_Unlimited_jump(instance);
 }
 
-bool Free_Shop = false;  // Free_Shop
+bool IsFree_Shop = false;  // Free_Shop
 
 // Bool Method Offset Hooking Example:
 bool (*old_Free_Shop)(void *instance);
-bool Hook_Free_Shop(void *instance) {
-    if (instance != NULL && Free_Shop) {
-          return false; // Or you can put return true;
-	}
-	return old_Free_Shop(instance);
+bool Free_Shop(void *instance) {
+     if (instance != NULL && IsFree_Shop) {
+             return false; // Or you can put return true;
+	     }
+	 return old_Free_Shop(instance);
 }
 
 // =============[🔴🔴🔴🔴🔴🔴]================
@@ -227,8 +225,8 @@ void DrawMenu() {
 
     if (ImGui::BeginTabItem("Player Hacks")) {
 		
-       ImGui::Checkbox("Unlimited Jump", &Unlimited_jump);
-       ImGui::Checkbox("Free Shop", &Free_Shop);
+       ImGui::Checkbox("Unlimited Jump", &IsUnlimited_jump);
+       ImGui::Checkbox("Free Shop", &IsFree_Shop);
 		
 		ImGui::EndTabItem();
     }

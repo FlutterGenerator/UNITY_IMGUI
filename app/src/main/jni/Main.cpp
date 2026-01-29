@@ -53,11 +53,6 @@ HOOKAF(void, Input, void *thiz, void *ex_ab, void *ex_ac) {
 static int oneMenuX = 0;
 static int oneMenuY = 0;
 
-//============[Offset Stored]================
-uintptr_t P_jump; // unlimited jump offset stored here
-uintptr_t P_shop; // Free shop offset stored here
-//===========🔴🔴🔴🔴===========
-
 
 void *hack_thread(void *) {
 
@@ -77,14 +72,14 @@ if (!isLoaderDone) {
         // Auto update offset - Namespace > class > method
     
         // unlimited jump hack
-        auto JUMP = new LoadClass("SYBO.RunnerCore.Character", OBFUSCATE("CharacterMotorAbilities"));
-    P_jump = JUMP->GetMethodOffsetByName(OBFUSCATE("get_JumpLimit"), 0);
-        DobbyHook((void *) P_jump, (void *) jump, (void **) &old_jump);
+        auto PlayerUnlimited_jump = new LoadClass("SYBO.RunnerCore.Character", OBFUSCATE("CharacterMotorAbilities"));
+		DWORD GetUnlimited_jump = PlayerUnlimited_jump->GetMethodOffsetByName(OBFUSCATE("get_JumpLimit"), 0);
+        DobbyHook((void *)GetUnlimited_jump, (void *)Unlimited_jump, (void **) &old_Unlimited_jump);
     
         // Free shop hack
-        auto SHOP = new LoadClass("SYBO.Subway.Core.GameData", OBFUSCATE("Currency"));
-    P_shop = SHOP->GetMethodOffsetByName(OBFUSCATE("get_IsIAP"), 0);
-        DobbyHook((void *) P_shop, (void *) Hook_Free_Shop, (void **) &old_Free_Shop);
+        auto PlayerFree_Shop = new LoadClass("SYBO.Subway.Core.GameData", OBFUSCATE("Currency"));
+		DWORD GetFree_Shop = PlayerFree_Shop->GetMethodOffsetByName(OBFUSCATE("get_IsIAP"), 0);
+        DobbyHook((void *)GetFree_Shop, (void *)Free_Shop, (void **) &old_Free_Shop);
     
         //===============🟢🟢🟢🟢🟢🟢🟢=============
         isLoaderDone = true;
