@@ -49,9 +49,9 @@ HOOKAF(void, Input, void *thiz, void *ex_ab, void *ex_ac) {
     ImGui_ImplAndroid_HandleInputEvent((AInputEvent *)thiz);
     return;
 }
+
 static int oneMenuX = 0;
 static int oneMenuY = 0;
-
 
 //============[Offset Stored]================
 uintptr_t P_jump; // unlimited jump offset stored here
@@ -75,21 +75,17 @@ if (!isLoaderDone) {
         //===============🟢🟢🟢🟢🟢🟢🟢=============
 
         // Auto update offset - Namespace > class > method
-
-
+    
         // unlimited jump hack
         auto JUMP = new LoadClass("SYBO.RunnerCore.Character", OBFUSCATE("CharacterMotorAbilities"));
     P_jump = JUMP->GetMethodOffsetByName(OBFUSCATE("get_JumpLimit"), 0);
         DobbyHook((void *) P_jump, (void *) jump, (void **) &old_jump);
-
-
+    
         // Free shop hack
         auto SHOP = new LoadClass("SYBO.Subway.Core.GameData", OBFUSCATE("Currency"));
     P_shop = SHOP->GetMethodOffsetByName(OBFUSCATE("get_IsIAP"), 0);
         DobbyHook((void *) P_shop, (void *) Hook_Free_Shop, (void **) &old_Free_Shop);
-
-
-
+    
         //===============🟢🟢🟢🟢🟢🟢🟢=============
         isLoaderDone = true;
  }
@@ -97,10 +93,6 @@ if (!isLoaderDone) {
     LOGI(OBFUSCATE("%s has been loaded"), (const char *) targetLibName);
 
         // WE SUPPORT ALL TYPE HOOKING TAKEN FROM LGL 3.2
-
-
-
-
 
 #if defined(__aarch64__) 
 
@@ -127,7 +119,6 @@ if (!isLoaderDone) {
 
 }
 
-
 void hexpatcher() {
             // PATCH_SWITCH_EXT
         // Additional macro to apply hex patches from an external const char* source.
@@ -140,7 +131,6 @@ void hexpatcher() {
             //PATCH_SWITCH("0x1234",  "0A 00 A0 E3 1E FF 2F E1", isMaxLevel)
                 //PATCH_LIB_SWITCH("libil2cpp.so", "0x1234", "0A 00 A0 E3 1E FF 2F E1", isMaxLevel)
 }
-
 
 void *imgui_go(void *) {
     uintptr_t address = findLibrary("libil2cpp.so");
