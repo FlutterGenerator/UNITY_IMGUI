@@ -176,6 +176,28 @@ int Unlimited_jump(void *instance) {
 	return old_Unlimited_jump(instance);
 }
 
+bool IsUnlimited_Currency = false;  // unlimited Currency
+
+// Int Method Offset Hooking Example:
+int (*old_Unlimited_Currency)(void *instance);
+int Unlimited_Currency(void *instance) {
+    if (instance != NULL && IsUnlimited_Currency) {
+          return 999999999; // Int Hook Value = 999,999,999
+    }
+    return old_Unlimited_Currency(instance);
+}
+
+bool IsMaxPowerUp = false;  // unlimited MaxPowerUp
+
+// Int Method Offset Hooking Example:
+int (*old_MaxPowerUp)(void *instance);
+int MaxPowerUp(void *instance) {
+    if (instance != NULL && IsMaxPowerUp) {
+          return 999999999; // Int Hook Value = 999,999,999
+    }
+    return old_MaxPowerUp(instance);
+}
+
 bool IsFree_Shop = false;  // Free_Shop
 
 // Bool Method Offset Hooking Example:
@@ -185,6 +207,17 @@ bool Free_Shop(void *instance) {
              return false; // Or you can put return true;
 	     }
 	 return old_Free_Shop(instance);
+}
+
+bool IsNoCrash = false; // NoCrash
+
+// Bool Method Offset Hooking Example:
+bool (*old_NoCrash)(void *instance);
+bool NoCrash(void *instance) {
+    if (instance != NULL && IsNoCrash) {
+          return false; // Or you can put return true;
+    }
+    return old_NoCrash(instance);
 }
 
 // =============[🔴🔴🔴🔴🔴🔴]================
@@ -226,7 +259,10 @@ void DrawMenu() {
     if (ImGui::BeginTabItem("Player Hacks")) {
 		
        ImGui::Checkbox("Unlimited Jump", &IsUnlimited_jump);
+       ImGui::Checkbox("Unlimited Currency", &IsUnlimited_Currency);
+       ImGui::Checkbox("Unlimited MaxPowerUp", &IsMaxPowerUp);
        ImGui::Checkbox("Free Shop", &IsFree_Shop);
+       ImGui::Checkbox("No Crash", &IsNoCrash);
 		
 		ImGui::EndTabItem();
     }

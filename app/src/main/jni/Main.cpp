@@ -70,17 +70,32 @@ if (!isLoaderDone) {
         //===============🟢🟢🟢🟢🟢🟢🟢=============
 
         // Auto update offset - Namespace > class > method
-    
+
         // unlimited jump hack
         auto PlayerUnlimited_jump = new LoadClass("SYBO.RunnerCore.Character", OBFUSCATE("CharacterMotorAbilities"));
-		DWORD GetUnlimited_jump = PlayerUnlimited_jump->GetMethodOffsetByName(OBFUSCATE("get_JumpLimit"), 0);
+                DWORD GetUnlimited_jump = PlayerUnlimited_jump->GetMethodOffsetByName(OBFUSCATE("get_JumpLimit"), 0);
         DobbyHook((void *)GetUnlimited_jump, (void *)Unlimited_jump, (void **) &old_Unlimited_jump);
-    
+
         // Free shop hack
         auto PlayerFree_Shop = new LoadClass("SYBO.Subway.Core.CommonData", OBFUSCATE("Currency"));
-		DWORD GetFree_Shop = PlayerFree_Shop->GetMethodOffsetByName(OBFUSCATE("get_IsIAP"), 0);
+                DWORD GetFree_Shop = PlayerFree_Shop->GetMethodOffsetByName(OBFUSCATE("get_IsIAP"), 0);
         DobbyHook((void *)GetFree_Shop, (void *)Free_Shop, (void **) &old_Free_Shop);
-    
+        
+        // unlimited Currency
+        auto PlayerUnlimited_Currency = new LoadClass("SYBO.Subway.Core.ProfileData", OBFUSCATE("WalletModel"));
+DWORD GetUnlimited_Currency = PlayerUnlimited_Currency->GetMethodOffsetByName(OBFUSCATE("GetCurrency"), 0);
+MSHookFunction((void *)GetUnlimited_Currency, (void *)Unlimited_Currency, (void **) &old_Unlimited_Currency);
+
+// unlimited MaxPowerUp
+auto PlayerMaxPowerUp = new LoadClass("SYBO.Subway.Core.ProfileData", OBFUSCATE("UpgradesModel"));
+DWORD GetMaxPowerUp = PlayerMaxPowerUp->GetMethodOffsetByName(OBFUSCATE("GetPowerupLevel"), 0);
+MSHookFunction((void *)GetMaxPowerUp, (void *)MaxPowerUp, (void **) &old_MaxPowerUp);
+
+// NoCrash
+auto PlayerNoCrash = new LoadClass("SYBO.Subway", OBFUSCATE("StumbleBehaviour"));
+DWORD GetNoCrash = PlayerNoCrash->GetMethodOffsetByName(OBFUSCATE("IsAutoReviveEnabled"), 0);
+MSHookFunction((void *)GetNoCrash, (void *)NoCrash, (void **) &old_NoCrash);
+
         //===============🟢🟢🟢🟢🟢🟢🟢=============
         isLoaderDone = true;
  }
