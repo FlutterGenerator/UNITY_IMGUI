@@ -180,11 +180,11 @@ int jump(void *instance) {
 	return old_jump(instance);
 }
 
-bool Free_Shop = false;  // Freeshop
+bool Free_Shop = false;  // Free_Shop
 
 // Bool Method Offset Hooking Example:
 bool (*old_Free_Shop)(void *instance);
-bool Free_Shop(void *instance) {
+bool Hook_Free_Shop(void *instance) {
     if (instance != NULL && Free_Shop) {
           return false; // Or you can put return true;.
 		}
