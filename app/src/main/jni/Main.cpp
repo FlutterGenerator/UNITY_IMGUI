@@ -77,7 +77,7 @@ if (!isLoaderDone) {
         DobbyHook((void *)GetUnlimited_jump, (void *)Unlimited_jump, (void **) &old_Unlimited_jump);
     
         // Free shop hack
-        auto PlayerFree_Shop = new LoadClass("SYBO.Subway.Core.GameData", OBFUSCATE("Currency"));
+        auto PlayerFree_Shop = new LoadClass("SYBO.Subway.Core.CommonData", OBFUSCATE("Currency"));
 		DWORD GetFree_Shop = PlayerFree_Shop->GetMethodOffsetByName(OBFUSCATE("get_IsIAP"), 0);
         DobbyHook((void *)GetFree_Shop, (void *)Free_Shop, (void **) &old_Free_Shop);
     
