@@ -154,5 +154,4 @@ void hexpatcher();
  * within its specific environment. Ensure to modify the appropriate structure 
  * based on the target architecture for accurate patching.
  */
- 
- 
+
