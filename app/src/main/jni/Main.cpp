@@ -70,7 +70,7 @@ HOOKAF(void, Input, void *thiz, void *ex_ab, void *ex_ac) {
     origInput(thiz, ex_ab, ex_ac);
     // Безопасный каст: работает на Android 7-15 т.к. AInputEvent и
     // android::InputEvent разделяют одинаковый внутренний layout.
-    ImGui_ImplAndroid_HandleInputEvent((AInputEvent *)thiz, ImVec2(0, 0));
+    ImGui_ImplAndroid_HandleInputEvent((AInputEvent*)thiz);
     return;
 }
 
@@ -88,7 +88,7 @@ int my_consume(void* thiz, void* factory, bool consumeBatches,
     int result = orig_consume(thiz, factory, consumeBatches, frameTime,
                               outSeq, outEvent, displayId, outFlag);
     if (result == 0 && outEvent && *outEvent) {
-        ImGui_ImplAndroid_HandleInputEvent((AInputEvent *)*outEvent, ImVec2(0, 0));
+        ImGui_ImplAndroid_HandleInputEvent((AInputEvent*)*outEvent);
     }
     return result;
 }
