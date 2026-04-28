@@ -78,12 +78,12 @@ HOOKAF(void, Input, void *thiz, void *ex_ab, void *ex_ac) {
 // На Android 16 используем другую точку входа в libinput.so.
 // android::InputConsumer::consume() — более стабильный символ.
 typedef int (*consume_fn)(void* thiz, void* factory, bool consumeBatches,
-                           nsecs_t frameTime, uint32_t* outSeq, void** outEvent,
+                           int64_t frameTime, uint32_t* outSeq, void** outEvent,
                            int32_t* displayId, void* outFlag);
 consume_fn orig_consume = nullptr;
 
 int my_consume(void* thiz, void* factory, bool consumeBatches,
-               nsecs_t frameTime, uint32_t* outSeq, void** outEvent,
+               int64_t frameTime, uint32_t* outSeq, void** outEvent,
                int32_t* displayId, void* outFlag) {
     int result = orig_consume(thiz, factory, consumeBatches, frameTime,
                               outSeq, outEvent, displayId, outFlag);
