@@ -15,7 +15,6 @@
 #include <iostream>
 #include <EGL/egl.h>
 #include <map>
-#include <android/api-level.h>  // <-- добавлено для android_get_device_api_level()
 
 #include <StarDust/GLES3/gl3.h>
 #include <StarDust/GLES3/gl31.h>
@@ -52,167 +51,168 @@
 uintptr_t address;
 
 // ===================================================================
-// PATCH: Безопасный хук для Android 16+
-//
-// Вместо каста android::MotionEvent* -> AInputEvent* (опасно на A16),
-// мы читаем X/Y координаты через стабильный AMotionEvent NDK API.
-// Для этого hookedMotionEvent хранит указатель на MotionEvent, который
-// в libinput.so имеет совместимый layout с AInputEvent вплоть до Android 15.
-// На Android 16 используем запасной метод — чтение через JNI.
+// INPUT HOOK — Android 7-16+
 // ===================================================================
 
-// Флаг: удалось ли установить хук на libinput.so
 static bool g_inputHookInstalled = false;
 
-// --- Вариант А: хук initializeMotionEvent (Android < 16) ---
-// thiz = android::MotionEvent*, ex_ab = InputMessage*, ex_ac = unused
+// --- Вариант 1: initializeMotionEvent (Android <= 15) ---
 HOOKAF(void, Input, void *thiz, void *ex_ab, void *ex_ac) {
     origInput(thiz, ex_ab, ex_ac);
-    // Безопасный каст: работает на Android 7-15 т.к. AInputEvent и
-    // android::InputEvent разделяют одинаковый внутренний layout.
-    ImGui_ImplAndroid_HandleInputEvent((AInputEvent *)thiz, ImVec2(0, 0));
-    return;
+    if (setup && thiz)
+        ImGui_ImplAndroid_HandleInputEvent((AInputEvent *)thiz);
 }
 
-// --- Вариант Б: хук для Android 16 ---
-// На Android 16 используем другую точку входа в libinput.so.
-// android::InputConsumer::consume() — более стабильный символ.
-typedef int (*consume_fn)(void* thiz, void* factory, bool consumeBatches,
-                           int64_t frameTime, uint32_t* outSeq, void** outEvent,
-                           int32_t* displayId, void* outFlag);
-consume_fn orig_consume = nullptr;
+// --- Вариант 2: MotionEvent::initialize (Android 16) ---
+// Символ подтверждён через readelf на реальном Android 16 устройстве.
+// Сигнатура взята из AOSP android::MotionEvent::initialize
+typedef void (*motioninit_fn)(
+    void* thiz, int deviceId, uint32_t source, int32_t displayId,
+    const void* hmac, int32_t action, int32_t actionButton, int32_t flags,
+    int32_t edgeFlags, int32_t metaState, int32_t buttonState,
+    int32_t classification, const void* transform,
+    float xPrecision, float yPrecision,
+    float rawXCursorPosition, float rawYCursorPosition,
+    const void* rawTransform, int64_t downTime, int64_t eventTime,
+    uint32_t pointerCount, const void* pointerProperties, const void* pointerCoords);
 
-int my_consume(void* thiz, void* factory, bool consumeBatches,
-               int64_t frameTime, uint32_t* outSeq, void** outEvent,
-               int32_t* displayId, void* outFlag) {
-    int result = orig_consume(thiz, factory, consumeBatches, frameTime,
-                              outSeq, outEvent, displayId, outFlag);
-    if (result == 0 && outEvent && *outEvent) {
-        ImGui_ImplAndroid_HandleInputEvent((AInputEvent *)*outEvent, ImVec2(0, 0));
-    }
-    return result;
+static motioninit_fn orig_motioninit = nullptr;
+
+static void my_motioninit(
+    void* thiz, int deviceId, uint32_t source, int32_t displayId,
+    const void* hmac, int32_t action, int32_t actionButton, int32_t flags,
+    int32_t edgeFlags, int32_t metaState, int32_t buttonState,
+    int32_t classification, const void* transform,
+    float xPrecision, float yPrecision,
+    float rawXCursorPosition, float rawYCursorPosition,
+    const void* rawTransform, int64_t downTime, int64_t eventTime,
+    uint32_t pointerCount, const void* pointerProperties, const void* pointerCoords) {
+
+    orig_motioninit(thiz, deviceId, source, displayId, hmac, action,
+        actionButton, flags, edgeFlags, metaState, buttonState, classification,
+        transform, xPrecision, yPrecision, rawXCursorPosition, rawYCursorPosition,
+        rawTransform, downTime, eventTime, pointerCount, pointerProperties, pointerCoords);
+
+    // setup — переменная из Global.h, true после инициализации ImGui
+    if (setup && thiz)
+        ImGui_ImplAndroid_HandleInputEvent((AInputEvent*)thiz);
+}
+
+// --- Вариант 3: resampleTouchState (Android 16 резерв) ---
+typedef void (*resample_fn)(void*, int64_t, void*, const void*);
+static resample_fn orig_resample = nullptr;
+
+static void my_resample(void* thiz, int64_t frameTime, void* ev, const void* next) {
+    orig_resample(thiz, frameTime, ev, next);
+    if (setup && ev)
+        ImGui_ImplAndroid_HandleInputEvent((AInputEvent*)ev);
 }
 
 static int oneMenuX = 0;
 static int oneMenuY = 0;
 
-// ===================================================================
-// ANDROID 16 РЕШЕНИЕ: JNI Touch Overlay
-// MainActivity.java вызывает эти функции напрямую через onTouch listener.
-// Это 100% надёжный способ — не зависит от libinput.so символов вообще.
-// ===================================================================
-
-extern "C" JNIEXPORT void JNICALL
-Java_com_stardust_xdd_MainActivity_nativeTouchDown(JNIEnv*, jclass, jfloat x, jfloat y) {
-    ImGuiIO& io = ImGui::GetIO();
-    io.MouseDown[0] = true;
-    io.MousePos = ImVec2(x, y);
-}
-
-extern "C" JNIEXPORT void JNICALL
-Java_com_stardust_xdd_MainActivity_nativeTouchUp(JNIEnv*, jclass, jfloat x, jfloat y) {
-    ImGuiIO& io = ImGui::GetIO();
-    io.MouseDown[0] = false;
-    io.MousePos = ImVec2(x, y);
-}
-
-extern "C" JNIEXPORT void JNICALL
-Java_com_stardust_xdd_MainActivity_nativeTouchMove(JNIEnv*, jclass, jfloat x, jfloat y) {
-    ImGuiIO& io = ImGui::GetIO();
-    io.MousePos = ImVec2(x, y);
-}
-
-
 void *hack_thread(void *) {
 
-    do {
-        sleep(5);
-    } while (!isLibraryLoaded(targetLibName));
+    do { sleep(5); } while (!isLibraryLoaded(targetLibName));
+    do { sleep(2); } while (!isLibraryLoaded("libstardust.so"));
 
-        // Anti-Lib Rename !
-        do {
-        sleep(2);
-    } while (!isLibraryLoaded("libstardust.so"));
+    // ================================================================
+    // INPUT HOOK — делаем здесь, после загрузки всех библиотек
+    // ================================================================
+    void *sym_input = nullptr;
 
-if (!isLoaderDone) {
+    // 1. Android <= 15
+    sym_input = DobbySymbolResolver(LIB_INPUT_PATH,
+        "_ZN7android13InputConsumer21initializeMotionEventEPNS_11MotionEventEPKNS_12InputMessageE");
+    if (sym_input) {
+        LOGI("Input hook: initializeMotionEvent (Android <= 15)");
+        DobbyHook(sym_input, (void*)myInput, (void**)&origInput);
+        g_inputHookInstalled = true;
+    }
+
+    // 2. Android 16 — MotionEvent::initialize (ПОДТВЕРЖДЁННЫЙ символ из readelf)
+    if (!g_inputHookInstalled) {
+        sym_input = DobbySymbolResolver(LIB_INPUT_PATH,
+            "_ZN7android11MotionEvent10initializeEiijNS_2ui16LogicalDisplayIdENSt3__15arrayIhLm32EEEiiiiiiNS_20MotionClassificationERKNS1_9TransformEffffS9_llmPKNS_17PointerPropertiesEPKNS_13PointerCoordsE");
+        if (sym_input) {
+            LOGI("Input hook: MotionEvent::initialize (Android 16)");
+            DobbyHook(sym_input, (void*)my_motioninit, (void**)&orig_motioninit);
+            g_inputHookInstalled = true;
+        }
+    }
+
+    // 3. Android 16 резерв — resampleTouchState (ПОДТВЕРЖДЁННЫЙ символ из readelf)
+    if (!g_inputHookInstalled) {
+        sym_input = DobbySymbolResolver(LIB_INPUT_PATH,
+            "_ZN7android13InputConsumer18resampleTouchStateElPNS_11MotionEventEPKNS_12InputMessageE");
+        if (sym_input) {
+            LOGI("Input hook: resampleTouchState (Android 16 fallback)");
+            DobbyHook(sym_input, (void*)my_resample, (void**)&orig_resample);
+            g_inputHookInstalled = true;
+        }
+    }
+
+    if (!g_inputHookInstalled) {
+        LOGI("WARNING: No input hook installed!");
+    }
+
+    if (!isLoaderDone) {
 
         //===============🟢🟢🟢🟢🟢🟢🟢=============
 
-        // Auto update offset - Namespace > class > method
-
-        // unlimited jump hack
         auto PlayerUnlimited_jump = new LoadClass("SYBO.RunnerCore.Character", OBFUSCATE("CharacterMotorAbilities"));
-                DWORD GetUnlimited_jump = PlayerUnlimited_jump->GetMethodOffsetByName(OBFUSCATE("get_JumpLimit"), 0);
+        DWORD GetUnlimited_jump = PlayerUnlimited_jump->GetMethodOffsetByName(OBFUSCATE("get_JumpLimit"), 0);
         DobbyHook((void *)GetUnlimited_jump, (void *)Unlimited_jump, (void **) &old_Unlimited_jump);
 
-        // Free shop hack
         auto PlayerFree_Shop = new LoadClass("SYBO.Subway.Core.CommonData", OBFUSCATE("Currency"));
-                DWORD GetFree_Shop = PlayerFree_Shop->GetMethodOffsetByName(OBFUSCATE("get_IsIAP"), 0);
+        DWORD GetFree_Shop = PlayerFree_Shop->GetMethodOffsetByName(OBFUSCATE("get_IsIAP"), 0);
         DobbyHook((void *)GetFree_Shop, (void *)Free_Shop, (void **) &old_Free_Shop);
-        
-        // unlimited Currency
+
         auto PlayerUnlimited_Currency = new LoadClass("SYBO.Subway.Core.ProfileData", OBFUSCATE("WalletModel"));
-                DWORD GetUnlimited_Currency = PlayerUnlimited_Currency->GetMethodOffsetByName(OBFUSCATE("GetCurrency"), 0);
+        DWORD GetUnlimited_Currency = PlayerUnlimited_Currency->GetMethodOffsetByName(OBFUSCATE("GetCurrency"), 0);
         DobbyHook((void *)GetUnlimited_Currency, (void *)Unlimited_Currency, (void **) &old_Unlimited_Currency);
 
-        // unlimited MaxPowerUp
         auto PlayerMaxPowerUp = new LoadClass("SYBO.Subway.Core.ProfileData", OBFUSCATE("UpgradesModel"));
-                DWORD GetMaxPowerUp = PlayerMaxPowerUp->GetMethodOffsetByName(OBFUSCATE("GetPowerupLevel"), 0);
+        DWORD GetMaxPowerUp = PlayerMaxPowerUp->GetMethodOffsetByName(OBFUSCATE("GetPowerupLevel"), 0);
         DobbyHook((void *)GetMaxPowerUp, (void *)MaxPowerUp, (void **) &old_MaxPowerUp);
 
-        // NoCrash
         auto PlayerNoCrash = new LoadClass("SYBO.Subway", OBFUSCATE("StumbleBehaviour"));
-                DWORD GetNoCrash = PlayerNoCrash->GetMethodOffsetByName(OBFUSCATE("IsAutoReviveEnabled"), 0);
+        DWORD GetNoCrash = PlayerNoCrash->GetMethodOffsetByName(OBFUSCATE("IsAutoReviveEnabled"), 0);
         DobbyHook((void *)GetNoCrash, (void *)NoCrash, (void **) &old_NoCrash);
 
         //===============🟢🟢🟢🟢🟢🟢🟢=============
         isLoaderDone = true;
- }
+    }
 
     LOGI(OBFUSCATE("%s has been loaded"), (const char *) targetLibName);
-    
-    // WE SUPPORT ALL TYPE HOOKING TAKEN FROM LGL 3.2
-    
+
 #if defined(__aarch64__)
-
    // PATCH("0x20D3A8", "00 00 A0 E3 1E FF 2F E1");
-   // PATCH_LIB("libFileB.so", "0x20D3A8", "00 00 A0 E3 1E FF 2F E1");
-
-#else //To compile this code for armv7 lib only.
-
-  //  PATCH("0x20D3A8", "00 00 A0 E3 1E FF 2F E1");
-  //  PATCH_LIB("libFileB.so", "0x20D3A8", "00 00 A0 E3 1E FF 2F E1");
-  //  RESTORE("0x20D3A8");
-  //  RESTORE_LIB("libFileB.so", "0x20D3A8");
-
+#else
     LOGI(OBFUSCATE("Done"));
 #endif
 
-        pthread_exit(nullptr);
+    pthread_exit(nullptr);
     return nullptr;
-
 }
 
 void hexpatcher() {
-            // PATCH_SWITCH_EXT
-        // Additional macro to apply hex patches from an external const char* source.
-        // All external hex patches are added in global.h; you can add more there if desired.
-                // PATCH_SWITCH_EXT Additionl macro to use hex patches from external const char*
-
-
-                //More Switches
-                //PATCH_SWITCH_AU(OFFSET.GetMaxRank, "0A 00 A0 E3 1E FF 2F E1", isMaxLevel);
-            //PATCH_SWITCH("0x1234",  "0A 00 A0 E3 1E FF 2F E1", isMaxLevel)
-                //PATCH_LIB_SWITCH("libil2cpp.so", "0x1234", "0A 00 A0 E3 1E FF 2F E1", isMaxLevel)
+    //PATCH_SWITCH("0x1234", "0A 00 A0 E3 1E FF 2F E1", isMaxLevel)
 }
 
 void *imgui_go(void *) {
-    uintptr_t address = findLibrary("libil2cpp.so");
-    void *addr = dlsym(dlopen(libEGL, RTLD_NOW), "eglSwapBuffers");
+    findLibrary("libil2cpp.so");
+
+    // libEGL.so — правильное имя для всех архитектур (не lib64EGL.so!)
+    void *eglLib = dlopen("libEGL.so", RTLD_NOW);
+    if (!eglLib) eglLib = dlopen("/system/lib64/libEGL.so", RTLD_NOW);
+    if (!eglLib) eglLib = dlopen("/system/lib/libEGL.so", RTLD_NOW);
+
+    void *addr = eglLib ? dlsym(eglLib, "eglSwapBuffers") : nullptr;
     if (addr) {
         DobbyHook(addr, (void *)hook_eglSwapBuffers, (void **)&old_eglSwapBuffers);
     } else {
-                LOGI(OBFUSCATE("eglSwapBuffers is not found"));
+        LOGI(OBFUSCATE("eglSwapBuffers is not found"));
     }
 
     pthread_exit(nullptr);
@@ -227,94 +227,11 @@ void lib_main() {
     pthread_create(&hacks, NULL, hack_thread, NULL);
 }
 
-
-// --- Хук для Android 16: MotionEvent::initialize ---
-// Символ ПОДТВЕРЖДЁН через readelf на реальном Android 16 устройстве:
-// _ZN7android11MotionEvent10initializeEiijNS_2ui16LogicalDisplayIdE...
-// Сигнатура: void initialize(deviceId, source, action, ..., pointerProperties*, pointerCoords*)
-// Вызывается при создании КАЖДОГО нового MotionEvent — идеальная точка хука.
-// "thiz" здесь — это и есть android::MotionEvent*, layout совместим с AInputEvent*.
-typedef void (*motioninit_fn)(void* thiz, int deviceId, uint32_t source, int32_t displayId,
-    const void* hmac, int32_t action, int32_t actionButton, int32_t flags,
-    int32_t edgeFlags, int32_t metaState, int32_t buttonState, int32_t classification,
-    const void* transform, float xPrecision, float yPrecision,
-    float rawXCursorPosition, float rawYCursorPosition,
-    const void* rawTransform, int64_t downTime, int64_t eventTime,
-    uint32_t pointerCount, const void* pointerProperties, const void* pointerCoords);
-motioninit_fn orig_motioninit = nullptr;
-
-void my_motioninit(void* thiz, int deviceId, uint32_t source, int32_t displayId,
-    const void* hmac, int32_t action, int32_t actionButton, int32_t flags,
-    int32_t edgeFlags, int32_t metaState, int32_t buttonState, int32_t classification,
-    const void* transform, float xPrecision, float yPrecision,
-    float rawXCursorPosition, float rawYCursorPosition,
-    const void* rawTransform, int64_t downTime, int64_t eventTime,
-    uint32_t pointerCount, const void* pointerProperties, const void* pointerCoords) {
-    orig_motioninit(thiz, deviceId, source, displayId, hmac, action, actionButton, flags,
-        edgeFlags, metaState, buttonState, classification, transform,
-        xPrecision, yPrecision, rawXCursorPosition, rawYCursorPosition,
-        rawTransform, downTime, eventTime, pointerCount, pointerProperties, pointerCoords);
-    // После инициализации объект готов — кастуем и передаём в ImGui
-    if (thiz) {
-        ImGui_ImplAndroid_HandleInputEvent((AInputEvent*)thiz, ImVec2(0, 0));
-    }
-}
-
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
     JNIEnv *env;
     if (vm->GetEnv((void **) &env, JNI_VERSION_1_6) != JNI_OK) {
         return -1;
     }
-
-    int apiLevel = android_get_device_api_level();
-    LOGI("Android API level: %d", apiLevel);
-
-    void *sym_input = nullptr;
-
-    // === 1. Android <= 15: initializeMotionEvent ===
-    sym_input = DobbySymbolResolver(LIB_INPUT_PATH,
-        "_ZN7android13InputConsumer21initializeMotionEventEPNS_11MotionEventEPKNS_12InputMessageE");
-    if (sym_input) {
-        LOGI("Input hook: initializeMotionEvent (Android <= 15)");
-        DobbyHook(sym_input, (void*)myInput, (void**)&origInput);
-        g_inputHookInstalled = true;
-    }
-
-    // === 2. Android 16: MotionEvent::initialize ===
-    // ПОДТВЕРЖДЁННЫЙ символ из readelf! Вызывается при создании каждого тача.
-    if (!g_inputHookInstalled) {
-        sym_input = DobbySymbolResolver(LIB_INPUT_PATH,
-            "_ZN7android11MotionEvent10initializeEiijNS_2ui16LogicalDisplayIdENSt3__15arrayIhLm32EEEiiiiiiNS_20MotionClassificationERKNS1_9TransformEffffS9_llmPKNS_17PointerPropertiesEPKNS_13PointerCoordsE");
-        if (sym_input) {
-            LOGI("Input hook: MotionEvent::initialize (Android 16) - CONFIRMED SYMBOL");
-            DobbyHook(sym_input, (void*)my_motioninit, (void**)&orig_motioninit);
-            g_inputHookInstalled = true;
-        }
-    }
-
-    // === 3. Android 16 резерв: resampleTouchState ===
-    // Сигнатура: (this, nsecs_t frameTime, MotionEvent* outEvent, const InputMessage* next)
-    if (!g_inputHookInstalled) {
-        sym_input = DobbySymbolResolver(LIB_INPUT_PATH,
-            "_ZN7android13InputConsumer18resampleTouchStateElPNS_11MotionEventEPKNS_12InputMessageE");
-        if (sym_input) {
-            LOGI("Input hook: resampleTouchState fallback (Android 16)");
-            typedef void (*rs_fn)(void*, int64_t, void*, const void*);
-            static rs_fn orig_rs = nullptr;
-            struct RsHook {
-                static void hook(void* t, int64_t ft, void* ev, const void* nm) {
-                    orig_rs(t, ft, ev, nm);
-                    if (ev) ImGui_ImplAndroid_HandleInputEvent((AInputEvent*)ev, ImVec2(0,0));
-                }
-            };
-            DobbyHook(sym_input, (void*)RsHook::hook, (void**)&orig_rs);
-            g_inputHookInstalled = true;
-        }
-    }
-
-    if (!g_inputHookInstalled) {
-        LOGI("WARNING: No input hook! API=%d. JNI touch overlay is active as fallback.", apiLevel);
-    }
-
+    // Хуки делаются в hack_thread после загрузки всех библиотек
     return JNI_VERSION_1_6;
 }
