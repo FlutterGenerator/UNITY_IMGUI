@@ -70,7 +70,7 @@ HOOKAF(void, Input, void *thiz, void *ex_ab, void *ex_ac) {
     origInput(thiz, ex_ab, ex_ac);
     // Безопасный каст: работает на Android 7-15 т.к. AInputEvent и
     // android::InputEvent разделяют одинаковый внутренний layout.
-    ImGui_ImplAndroid_HandleInputEvent((AInputEvent *)thiz);
+    ImGui_ImplAndroid_HandleInputEvent((AInputEvent *)thiz, ImVec2(0, 0));
     return;
 }
 
@@ -88,7 +88,7 @@ int my_consume(void* thiz, void* factory, bool consumeBatches,
     int result = orig_consume(thiz, factory, consumeBatches, frameTime,
                               outSeq, outEvent, displayId, outFlag);
     if (result == 0 && outEvent && *outEvent) {
-        ImGui_ImplAndroid_HandleInputEvent((AInputEvent *)*outEvent);
+        ImGui_ImplAndroid_HandleInputEvent((AInputEvent *)*outEvent, ImVec2(0, 0));
     }
     return result;
 }
@@ -230,7 +230,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
     // 2. Android 16+ fallback #1: consume() — более стабильный символ
     if (!g_inputHookInstalled) {
         sym_input = DobbySymbolResolver(LIB_INPUT_PATH,
-            "_ZN7android13InputConsumer7consumeEPNS_20InputEventFactoryBaseEbxPjPPNS_10InputEventEPiPN7android4base16unique_fd_impl18DefaultCloserPolicyEE");
+            "_ZN7android13InputConsumer7consumeEPNS_20InputEventFactoryBaseEblPjPPNS_10InputEventEPi");
 
         if (sym_input != nullptr) {
             LOGI("Input hook: found consume() (Android 16 variant A)");
@@ -239,41 +239,68 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
         }
     }
 
-    // 3. Android 16+ fallback #2: другой вариант mangling consume()
+    // 2b. Android 16+ fallback #1b: другой укороченный вариант без displayId
     if (!g_inputHookInstalled) {
         sym_input = DobbySymbolResolver(LIB_INPUT_PATH,
-            "_ZN7android13InputConsumer7consumeEPNS_20InputEventFactoryBaseEbxPjPPNS_10InputEventEPi");
+            "_ZN7android13InputConsumer7consumeEPNS_20InputEventFactoryBaseEbxPjPPNS_10InputEventEPiPN7android4base16unique_fd_impl18DefaultCloserPolicyEE");
 
         if (sym_input != nullptr) {
-            LOGI("Input hook: found consume() (Android 16 variant B)");
+            LOGI("Input hook: found consume() (Android 16 variant A2)");
             DobbyHook(sym_input, (void *)my_consume, (void **)&orig_consume);
             g_inputHookInstalled = true;
         }
     }
 
-    // 4. Поиск по всем экспортам libinput.so (последний резерв)
+    // 3. Поиск по всем экспортам libinput.so (последний резерв)
     if (!g_inputHookInstalled) {
-        // Попытка через альтернативный путь libinput на некоторых вендорах
         const char* alt_paths[] = {
             "/system/lib64/libinput.so",
             "/system/lib/libinput.so",
             "/apex/com.android.art/lib64/libinput.so",
+            "/apex/com.android.media/lib64/libinput.so",
         };
-        const char* syms[] = {
+        // Android 16 AOSP добавил новый символ processMotion в InputConsumer
+        const char* syms_consume[] = {
+            // Android 16 — новый стабильный символ
+            "_ZN7android13InputConsumer13processMotionERKNS_12InputMessageE",
+            // Android 14-15 variants
             "_ZN7android13InputConsumer21initializeMotionEventEPNS_11MotionEventEPKNS_12InputMessageE",
             "_ZN7android13InputConsumer14initializeBaseEPNS_10InputEventEPKNS_12InputMessageE",
+            // consume() variants
+            "_ZN7android13InputConsumer7consumeEPNS_20InputEventFactoryBaseEblPjPPNS_10InputEventEPi",
+            "_ZN7android13InputConsumer7consumeEPNS_20InputEventFactoryBaseEbxPjPPNS_10InputEventEPi",
         };
         for (const char* path : alt_paths) {
-            for (const char* sym : syms) {
+            for (const char* sym : syms_consume) {
                 sym_input = DobbySymbolResolver(path, sym);
                 if (sym_input != nullptr) {
-                    LOGI("Input hook: found via alt path %s", path);
-                    DobbyHook(sym_input, (void *)myInput, (void **)&origInput);
+                    LOGI("Input hook: found '%s' via path %s", sym, path);
+                    // processMotion и initializeMotionEvent имеют другую сигнатуру
+                    if (strstr(sym, "processMotion") || strstr(sym, "initializeMotionEvent") || strstr(sym, "initializeBase")) {
+                        DobbyHook(sym_input, (void *)myInput, (void **)&origInput);
+                    } else {
+                        DobbyHook(sym_input, (void *)my_consume, (void **)&orig_consume);
+                    }
                     g_inputHookInstalled = true;
                     break;
                 }
             }
             if (g_inputHookInstalled) break;
+        }
+    }
+
+    // 4. Последний резерв: dlopen + перебор через /proc/self/maps
+    if (!g_inputHookInstalled) {
+        void* lib = dlopen("/system/lib64/libinput.so", RTLD_NOW | RTLD_GLOBAL);
+        if (!lib) lib = dlopen("/system/lib/libinput.so", RTLD_NOW | RTLD_GLOBAL);
+        if (lib) {
+            // Android 16 processMotion — самый надёжный символ
+            sym_input = dlsym(lib, "_ZN7android13InputConsumer13processMotionERKNS_12InputMessageE");
+            if (sym_input) {
+                LOGI("Input hook: found processMotion via dlsym (Android 16)");
+                DobbyHook(sym_input, (void *)myInput, (void **)&origInput);
+                g_inputHookInstalled = true;
+            }
         }
     }
 
