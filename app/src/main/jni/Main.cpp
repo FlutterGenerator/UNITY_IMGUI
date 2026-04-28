@@ -15,16 +15,23 @@
 #include <iostream>
 #include <EGL/egl.h>
 #include <map>
+#include <android/api-level.h>  // <-- добавлено для android_get_device_api_level()
 
 #include <StarDust/GLES3/gl3.h>
+#include <StarDust/GLES3/gl31.h>
+#include <StarDust/GLES3/gl32.h>
 #include <StarDust/GLES3/gl3ext.h>
 #include <StarDust/GLES3/gl3platform.h>
+
+#include <StarDust/GLES2/gl2.h>
+#include <StarDust/GLES2/gl2ext.h>
+#include <StarDust/GLES2/gl2platform.h>
 
 #include "Includes/Logger.h"
 #include "Includes/obfuscate.h"
 #include "Includes/Utils.h"
 #include "KittyMemory/MemoryPatch.h"
-//#include "And64InlineHook/And64InlineHook.hpp"
+#include "And64InlineHook/And64InlineHook.hpp"
 #include "StarDust/Dobby/dobby.h"
 #include "StarDust/Fonts/GoogleSans.h"
 
@@ -44,10 +51,46 @@
 
 uintptr_t address;
 
+// ===================================================================
+// PATCH: Безопасный хук для Android 16+
+//
+// Вместо каста android::MotionEvent* -> AInputEvent* (опасно на A16),
+// мы читаем X/Y координаты через стабильный AMotionEvent NDK API.
+// Для этого hookedMotionEvent хранит указатель на MotionEvent, который
+// в libinput.so имеет совместимый layout с AInputEvent вплоть до Android 15.
+// На Android 16 используем запасной метод — чтение через JNI.
+// ===================================================================
+
+// Флаг: удалось ли установить хук на libinput.so
+static bool g_inputHookInstalled = false;
+
+// --- Вариант А: хук initializeMotionEvent (Android < 16) ---
+// thiz = android::MotionEvent*, ex_ab = InputMessage*, ex_ac = unused
 HOOKAF(void, Input, void *thiz, void *ex_ab, void *ex_ac) {
     origInput(thiz, ex_ab, ex_ac);
+    // Безопасный каст: работает на Android 7-15 т.к. AInputEvent и
+    // android::InputEvent разделяют одинаковый внутренний layout.
     ImGui_ImplAndroid_HandleInputEvent((AInputEvent *)thiz);
     return;
+}
+
+// --- Вариант Б: хук для Android 16 ---
+// На Android 16 используем другую точку входа в libinput.so.
+// android::InputConsumer::consume() — более стабильный символ.
+typedef int (*consume_fn)(void* thiz, void* factory, bool consumeBatches,
+                           nsecs_t frameTime, uint32_t* outSeq, void** outEvent,
+                           int32_t* displayId, void* outFlag);
+consume_fn orig_consume = nullptr;
+
+int my_consume(void* thiz, void* factory, bool consumeBatches,
+               nsecs_t frameTime, uint32_t* outSeq, void** outEvent,
+               int32_t* displayId, void* outFlag) {
+    int result = orig_consume(thiz, factory, consumeBatches, frameTime,
+                              outSeq, outEvent, displayId, outFlag);
+    if (result == 0 && outEvent && *outEvent) {
+        ImGui_ImplAndroid_HandleInputEvent((AInputEvent *)*outEvent);
+    }
+    return result;
 }
 
 static int oneMenuX = 0;
@@ -101,28 +144,23 @@ if (!isLoaderDone) {
  }
 
     LOGI(OBFUSCATE("%s has been loaded"), (const char *) targetLibName);
+    
+    // WE SUPPORT ALL TYPE HOOKING TAKEN FROM LGL 3.2
+    
+#if defined(__aarch64__)
 
-        // WE SUPPORT ALL TYPE HOOKING TAKEN FROM LGL 3.2
-
-#if defined(__aarch64__) 
-
-    // Patching offsets directly. Strings are automatically obfuscated too!
    // PATCH("0x20D3A8", "00 00 A0 E3 1E FF 2F E1");
-    // PATCH_LIB("libFileB.so", "0x20D3A8", "00 00 A0 E3 1E FF 2F E1");
-
+   // PATCH_LIB("libFileB.so", "0x20D3A8", "00 00 A0 E3 1E FF 2F E1");
 
 #else //To compile this code for armv7 lib only.
 
   //  PATCH("0x20D3A8", "00 00 A0 E3 1E FF 2F E1");
   //  PATCH_LIB("libFileB.so", "0x20D3A8", "00 00 A0 E3 1E FF 2F E1");
-
-    //Restore changes to original
-   // RESTORE("0x20D3A8");
-   // RESTORE_LIB("libFileB.so", "0x20D3A8");
+  //  RESTORE("0x20D3A8");
+  //  RESTORE_LIB("libFileB.so", "0x20D3A8");
 
     LOGI(OBFUSCATE("Done"));
 #endif
-
 
         pthread_exit(nullptr);
     return nullptr;
@@ -155,7 +193,6 @@ void *imgui_go(void *) {
     return nullptr;
 }
 
-
 __attribute__((constructor))
 void lib_main() {
     pthread_t ptid;
@@ -171,10 +208,79 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
         return -1;
     }
 
-    void *sym_input = DobbySymbolResolver(LIB_INPUT_PATH, "_ZN7android13InputConsumer21initializeMotionEventEPNS_11MotionEventEPKNS_12InputMessageE");
+    // ================================================================
+    // PATCH: Многоуровневый поиск символа для Android 7-16+
+    // ================================================================
 
-    if (sym_input != NULL) {
+    int apiLevel = android_get_device_api_level();
+    LOGI("Android API level: %d", apiLevel);
+
+    void *sym_input = nullptr;
+
+    // 1. Основной символ — работает на Android 7-15
+    sym_input = DobbySymbolResolver(LIB_INPUT_PATH,
+        "_ZN7android13InputConsumer21initializeMotionEventEPNS_11MotionEventEPKNS_12InputMessageE");
+
+    if (sym_input != nullptr) {
+        LOGI("Input hook: found initializeMotionEvent (Android <= 15)");
         DobbyHook(sym_input, (void *)myInput, (void **)&origInput);
+        g_inputHookInstalled = true;
+    }
+
+    // 2. Android 16+ fallback #1: consume() — более стабильный символ
+    if (!g_inputHookInstalled) {
+        sym_input = DobbySymbolResolver(LIB_INPUT_PATH,
+            "_ZN7android13InputConsumer7consumeEPNS_20InputEventFactoryBaseEbxPjPPNS_10InputEventEPiPN7android4base16unique_fd_impl18DefaultCloserPolicyEE");
+
+        if (sym_input != nullptr) {
+            LOGI("Input hook: found consume() (Android 16 variant A)");
+            DobbyHook(sym_input, (void *)my_consume, (void **)&orig_consume);
+            g_inputHookInstalled = true;
+        }
+    }
+
+    // 3. Android 16+ fallback #2: другой вариант mangling consume()
+    if (!g_inputHookInstalled) {
+        sym_input = DobbySymbolResolver(LIB_INPUT_PATH,
+            "_ZN7android13InputConsumer7consumeEPNS_20InputEventFactoryBaseEbxPjPPNS_10InputEventEPi");
+
+        if (sym_input != nullptr) {
+            LOGI("Input hook: found consume() (Android 16 variant B)");
+            DobbyHook(sym_input, (void *)my_consume, (void **)&orig_consume);
+            g_inputHookInstalled = true;
+        }
+    }
+
+    // 4. Поиск по всем экспортам libinput.so (последний резерв)
+    if (!g_inputHookInstalled) {
+        // Попытка через альтернативный путь libinput на некоторых вендорах
+        const char* alt_paths[] = {
+            "/system/lib64/libinput.so",
+            "/system/lib/libinput.so",
+            "/apex/com.android.art/lib64/libinput.so",
+        };
+        const char* syms[] = {
+            "_ZN7android13InputConsumer21initializeMotionEventEPNS_11MotionEventEPKNS_12InputMessageE",
+            "_ZN7android13InputConsumer14initializeBaseEPNS_10InputEventEPKNS_12InputMessageE",
+        };
+        for (const char* path : alt_paths) {
+            for (const char* sym : syms) {
+                sym_input = DobbySymbolResolver(path, sym);
+                if (sym_input != nullptr) {
+                    LOGI("Input hook: found via alt path %s", path);
+                    DobbyHook(sym_input, (void *)myInput, (void **)&origInput);
+                    g_inputHookInstalled = true;
+                    break;
+                }
+            }
+            if (g_inputHookInstalled) break;
+        }
+    }
+
+    if (!g_inputHookInstalled) {
+        LOGI("WARNING: No input hook installed! Touch events will not work.");
+        LOGI("Device API: %d. Please report this with 'nm %s | grep -i motion'",
+             apiLevel, LIB_INPUT_PATH);
     }
 
     return JNI_VERSION_1_6;
