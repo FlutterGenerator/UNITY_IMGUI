@@ -288,9 +288,10 @@ void DrawMenu() {
 	}
 }
 
-// Forward declaration — определён в Main.cpp
-struct TouchState { float x, y; bool down; volatile bool updated; };
-extern TouchState g_touch;
+// TouchState — хранилище тач-событий.
+// Пишется из input-потока (хуки в Main.cpp), читается здесь в GL-потоке.
+struct TouchState { float x = 0, y = 0; bool down = false; volatile bool updated = false; };
+TouchState g_touch;
 
 void RenderImGui() {
     if (!setup) {
@@ -300,8 +301,7 @@ void RenderImGui() {
     ImGuiIO &io = ImGui::GetIO();
     io.DisplaySize = ImVec2(glWidth, glHeight);
 
-    // Читаем тач из g_touch (записывается из input-потока хуком).
-    // Здесь мы в GL-потоке — безопасно обращаться к ImGui.
+    // Читаем тач — здесь GL-поток, безопасно для ImGui
     if (g_touch.updated) {
         io.MousePos = ImVec2(g_touch.x, g_touch.y);
         io.MouseDown[0] = g_touch.down;
