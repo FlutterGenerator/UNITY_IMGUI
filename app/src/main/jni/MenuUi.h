@@ -288,13 +288,28 @@ void DrawMenu() {
 	}
 }
 
+// Forward declaration — определён в Main.cpp
+struct TouchState { float x, y; bool down; volatile bool updated; };
+extern TouchState g_touch;
+
 void RenderImGui() {
     if (!setup) {
         SetupImgui();
         setup = true;
     }
     ImGuiIO &io = ImGui::GetIO();
-    io.DisplaySize = ImVec2(glWidth, glHeight); 
+    io.DisplaySize = ImVec2(glWidth, glHeight);
+
+    // Читаем тач из g_touch (записывается из input-потока хуком).
+    // Здесь мы в GL-потоке — безопасно обращаться к ImGui.
+    if (g_touch.updated) {
+        io.MousePos = ImVec2(g_touch.x, g_touch.y);
+        io.MouseDown[0] = g_touch.down;
+        g_touch.updated = false;
+    } else if (!g_touch.down) {
+        io.MouseDown[0] = false;
+    }
+
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplAndroid_NewFrame(glWidth, glHeight);
     ImGui::NewFrame();
