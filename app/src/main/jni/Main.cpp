@@ -15,6 +15,7 @@
 #include <iostream>
 #include <EGL/egl.h>
 #include <map>
+#include <android/input.h>
 
 #include <StarDust/GLES3/gl3.h>
 #include <StarDust/GLES3/gl31.h>
@@ -53,19 +54,14 @@ uintptr_t address;
 // ===================================================================
 // INPUT HOOK — Android 7-16+
 // Thread-safe: хуки пишут в g_touch, GL-поток читает в RenderImGui
+// TouchState объявлен в MenuUi.h — здесь только extern
 // ===================================================================
 
 static bool g_inputHookInstalled = false;
 
-// Хранилище тач-событий — пишется из input-потока, читается из GL-потока
-struct TouchState {
-    float x = 0, y = 0;
-    bool down = false;
-    volatile bool updated = false;
-};
-TouchState g_touch; // extern в MenuUi.h
+// g_touch объявлен как TouchState g_touch в MenuUi.h (после #include)
+// Здесь только используем его
 
-// Безопасно читает координаты из MotionEvent через NDK API (не ImGui!)
 static void applyTouch(void* motionEvent) {
     if (!motionEvent) return;
     AInputEvent* ev = (AInputEvent*)motionEvent;
@@ -220,7 +216,6 @@ void hexpatcher() {
 void *imgui_go(void *) {
     findLibrary("libil2cpp.so");
 
-    // libEGL.so — правильное имя для всех архитектур (не lib64EGL.so!)
     void *eglLib = dlopen("libEGL.so", RTLD_NOW);
     if (!eglLib) eglLib = dlopen("/system/lib64/libEGL.so", RTLD_NOW);
     if (!eglLib) eglLib = dlopen("/system/lib/libEGL.so", RTLD_NOW);
@@ -249,6 +244,5 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
     if (vm->GetEnv((void **) &env, JNI_VERSION_1_6) != JNI_OK) {
         return -1;
     }
-    // Хуки делаются в hack_thread после загрузки всех библиотек
     return JNI_VERSION_1_6;
 }
