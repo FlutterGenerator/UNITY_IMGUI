@@ -52,20 +52,40 @@ uintptr_t address;
 
 // ===================================================================
 // INPUT HOOK — Android 7-16+
+// Thread-safe: хуки пишут в g_touch, GL-поток читает в RenderImGui
 // ===================================================================
 
 static bool g_inputHookInstalled = false;
 
+// Хранилище тач-событий — пишется из input-потока, читается из GL-потока
+struct TouchState {
+    float x = 0, y = 0;
+    bool down = false;
+    volatile bool updated = false;
+};
+TouchState g_touch; // extern в MenuUi.h
+
+// Безопасно читает координаты из MotionEvent через NDK API (не ImGui!)
+static void applyTouch(void* motionEvent) {
+    if (!motionEvent) return;
+    AInputEvent* ev = (AInputEvent*)motionEvent;
+    if (AInputEvent_getType(ev) != AINPUT_EVENT_TYPE_MOTION) return;
+    int32_t action = AMotionEvent_getAction(ev) & AMOTION_EVENT_ACTION_MASK;
+    g_touch.x = AMotionEvent_getX(ev, 0);
+    g_touch.y = AMotionEvent_getY(ev, 0);
+    g_touch.down = (action == AMOTION_EVENT_ACTION_DOWN ||
+                    action == AMOTION_EVENT_ACTION_MOVE);
+    g_touch.updated = true;
+}
+
 // --- Вариант 1: initializeMotionEvent (Android <= 15) ---
 HOOKAF(void, Input, void *thiz, void *ex_ab, void *ex_ac) {
     origInput(thiz, ex_ab, ex_ac);
-    if (setup && thiz)
-        ImGui_ImplAndroid_HandleInputEvent((AInputEvent *)thiz);
+    applyTouch(thiz);
 }
 
 // --- Вариант 2: MotionEvent::initialize (Android 16) ---
 // Символ подтверждён через readelf на реальном Android 16 устройстве.
-// Сигнатура взята из AOSP android::MotionEvent::initialize
 typedef void (*motioninit_fn)(
     void* thiz, int deviceId, uint32_t source, int32_t displayId,
     const void* hmac, int32_t action, int32_t actionButton, int32_t flags,
@@ -93,9 +113,7 @@ static void my_motioninit(
         transform, xPrecision, yPrecision, rawXCursorPosition, rawYCursorPosition,
         rawTransform, downTime, eventTime, pointerCount, pointerProperties, pointerCoords);
 
-    // setup — переменная из Global.h, true после инициализации ImGui
-    if (setup && thiz)
-        ImGui_ImplAndroid_HandleInputEvent((AInputEvent*)thiz);
+    applyTouch(thiz);
 }
 
 // --- Вариант 3: resampleTouchState (Android 16 резерв) ---
@@ -104,8 +122,7 @@ static resample_fn orig_resample = nullptr;
 
 static void my_resample(void* thiz, int64_t frameTime, void* ev, const void* next) {
     orig_resample(thiz, frameTime, ev, next);
-    if (setup && ev)
-        ImGui_ImplAndroid_HandleInputEvent((AInputEvent*)ev);
+    applyTouch(ev);
 }
 
 static int oneMenuX = 0;
